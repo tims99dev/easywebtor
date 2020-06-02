@@ -4,16 +4,30 @@ const fileUpload = require('express-fileupload');
 const fs = require("fs");
 const parseTorrent = require('parse-torrent')
 const mongoose = require("mongoose")
+const url = require("url")
+const http = require('http')
 const cors = require('cors')
 const TorentList = require('./model/torrents')
+const WebTorrent = require('webtorrent')
+const WebSocket = require('ws');
 
-mongoose.connect('mongodb+srv://process.env.DBLOGIN:process.env.DBPASS@cluster-lxzy5.mongodb.net/torrents', {
+const client = new WebTorrent()
+
+let port = process.env.PORT | 80
+/*
+mongoose.connect(`mongodb+srv://${process.env.DBLOGIN}:${process.env.DBPASS}@cluster-lxzy5.mongodb.net/torrents`, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
     useFindAndModify: false
 })
-
+*/
 const app = express();
+
+const server = http.createServer(app);
+
+const wss = new WebSocket.Server({
+    server
+});
 
 app.use(bodyParser.urlencoded({
     extended: false
@@ -24,18 +38,13 @@ app.use(fileUpload({
     useTempFiles: true,
     tempFileDir: './tmp/'
 }));
-
-
-var WebTorrent = require('webtorrent')
-
-var client = new WebTorrent()
-
-app.get('torrents', (req, res) => {
+/*
+app.get('/torrents', (req, res) => {
     TorentList.find({}, (err, torrents) => {
         res.send(torrents)
     })
 })
-
+*/
 app.post('/torrent', function (req, res) {
     let tr = parseTorrent(fs.readFileSync(req.files.torrent.tempFilePath))
     let torrent = new TorentList({
@@ -44,25 +53,14 @@ app.post('/torrent', function (req, res) {
     })
     torrent.save(function (err, torr) {
         if (err) return handleError(err)
-        // console.log(torr)
-
-        client.add(tr.infoHash, {
-            path: './torrent'
-        }, function (torrent) {
-            torrent.on('download', function (bytes) {
-
-            })
-            torrent.on('done', function () {
-                torr.size = torrent.length
-                torr.save()
-            })
-        })
+        download(tr.infoHash)
     })
     fs.unlinkSync(req.files.torrent.tempFilePath)
 })
 
 app.post('/magnet', function (req, res) {
-    if (req.body.magnet.match(/magnet:\?xt=urn:[a-z0-9]{20,50}/i)) {
+    if (req.body.magnet.match(/magnet:\?xt=urn:[a-z0-9]+/i)) {
+        /*
         let magnet = parseTorrent(req.body.magnet)
         let torrent = new TorentList({
             name: magnet.name,
@@ -70,28 +68,83 @@ app.post('/magnet', function (req, res) {
         })
         torrent.save(function (err, torr) {
             if (err) return handleError(err);
-            // console.log(torr)
-
-            client.add(req.body.magnet, {
-                path: './torrent'
-            }, function (torrent) {
-                torrent.on('download', function (bytes) {
-                    // console.log('just downloaded: ' + bytes)
-                    // console.log('total downloaded: ' + torrent.downloaded)
-                    // console.log('download speed: ' + torrent.downloadSpeed)
-                    // console.log('progress: ' + torrent.progress)
-                })
-                torrent.on('done', function () {
-                    torr.size = torrent.length
-                    torr.save()
-                })
-            })
-        })
+            */
+        download(req.body.magnet)
+        //})
     } else {
         res.send('Error: not a magnet')
     }
+
 })
 
-app.listen(3000, function () {
-    console.log("Started on PORT 3000");
+var torrents = []
+
+function download(magnet) {
+    client.add(magnet, {
+        path: './torrent'
+    }, function (torrent) {
+        torrent.on('download', function () {
+            //let index = torrents.findIndex(el => el.id === torrent.infoHash) || torrent.infoHash
+            console.dir(torrent.progress)
+            torrents[torrent.infoHash] = {
+                downloaded: torrent.downloaded,
+                downloadSpeed: torrent.downloadSpeed,
+                progress: torrent.progress
+            }
+            console.dir(torrents)
+
+            /*
+            console.log('just downloaded: ' + bytes)
+            console.log('total downloaded: ' + torrent.downloaded)
+            console.log('download speed: ' + torrent.downloadSpeed)
+            console.log('progress: ' + torrent.progress)
+            */
+            //torr.size = torrent.length
+            //torr.save()
+        })
+        torrent.on('warning', function (err) {
+            console.dir(err);
+        })
+        torrent.on('done', function () {
+            //torr.size = torrent.length
+            //torr.save()
+        })
+    })
+}
+
+wss.on('connection', function connection(ws, req) {
+    console.log("connection ...");
+    //let id = (new Date() - Math.floor(Math.random()*10000000000)).toString(16)
+    const parameters = url.parse(req.url, true);
+
+    ws.id = parameters.query.id
+    //ws.torrentId = parameters.query.id
+    let timer;
+    if (wss.clients.size == 1) {
+        timer = setTimeout(function tick() {
+            wss.clients.forEach(function each(client) {
+                let torrent = torrents.find(el => el.id === client.id)
+                ws.send(torrent)
+                console.dir(torrents)
+            })
+            timer = setTimeout(tick, 1500);
+        }, 2000);
+    } else if (wss.clients.size == 0) {
+        clearTimeout(timer);
+    }
+
+    wss.clients.forEach(function each(client) {
+        console.log('Client.ID: ' + client.id);
+    });
+})
+/*
+wss.on('connection', function connection(ws) {
+    console.log("connection ...");
+    setInterval(() => {
+        ws.send('message from server at: ' + new Date())
+    }, 2000)
+});
+*/
+server.listen(port, function () {
+    console.log("Started on PORT " + port);
 })
