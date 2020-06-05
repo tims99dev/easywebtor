@@ -14,13 +14,13 @@ const WebSocket = require('ws');
 const client = new WebTorrent()
 
 let port = process.env.PORT | 80
-
+/*
 mongoose.connect(`mongodb+srv://${process.env.DBLOGIN}:${process.env.DBPASS}@cluster-lxzy5.mongodb.net/torrents`, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
     useFindAndModify: false
 })
-
+*/
 const app = express();
 
 const server = http.createServer(app);
@@ -60,17 +60,17 @@ app.post('/torrent', function (req, res) {
 
 app.post('/magnet', function (req, res) {
     if (req.body.magnet.match(/magnet:\?xt=urn:[a-z0-9]+/i)) {
-
-        let magnet = parseTorrent(req.body.magnet)
-        let torrent = new TorentList({
-            name: magnet.name,
-            magnet: req.body.magnet
-        })
-        torrent.save(function (err, torr) {
-            if (err) return handleError(err);
-
-            download(req.body.magnet)
-        })
+        /*
+                let magnet = parseTorrent(req.body.magnet)
+                let torrent = new TorentList({
+                    name: magnet.name,
+                    magnet: req.body.magnet
+                })
+                torrent.save(function (err, torr) {
+                    if (err) return handleError(err);
+        */
+        download(req.body.magnet)
+        //   })
     } else {
         res.send('Error: not a magnet')
     }
@@ -99,8 +99,8 @@ function download(magnet) {
             console.dir(err);
         })
         torrent.on('done', function () {
-            torr.size = torrent.length
-            torr.save()
+            //torr.size = torrent.length
+            //torr.save()
         })
     })
 }
@@ -109,24 +109,29 @@ wss.on('connection', function connection(ws, req) {
     console.log("connection ...");
     const parameters = url.parse(req.url, true);
 
-    ws.id = parameters.query.id
-    let timer;
-    if (wss.clients.size == 1) {
-        timer = setTimeout(function tick() {
-            wss.clients.forEach(function each(client) {
-                let torrent = torrents.find(el => el.id === client.id)
-                ws.send(JSON.stringify(torrent))
-                console.dir(torrents)
-            })
-            timer = setTimeout(tick, 1500);
-        }, 2000);
-    } else if (wss.clients.size == 0) {
-        clearTimeout(timer);
-    }
+    if (parameters.query.id) {
+        ws.id = parameters.query.id
+        let timer;
+        if (wss.clients.size == 1) {
+            timer = setTimeout(function tick() {
+                wss.clients.forEach(function each(client) {
+                    let torrent = torrents.find(el => el.id === client.id)
+                    ws.send(JSON.stringify(torrent))
+                    console.dir(torrents)
+                })
+                timer = setTimeout(tick, 1500);
+            }, 2000);
+        } else if (wss.clients.size == 0) {
+            clearTimeout(timer);
+        }
 
-    wss.clients.forEach(function each(client) {
-        console.log('Client.ID: ' + client.id);
-    });
+        wss.clients.forEach(function each(client) {
+            console.log('Client.ID: ' + client.id);
+        });
+    } else {
+        ws.send("Error connection.")
+        ws.close();
+    }
 })
 
 server.listen(port, function () {
