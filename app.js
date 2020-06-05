@@ -83,22 +83,31 @@ function download(magnet) {
     client.add(magnet, {
         path: './torrent'
     }, function (torrent) {
+        console.dir(`Torrent: ${torrent.infoHash} is start download`)
         torrent.on('download', function () {
             let index = torrents.findIndex(el => el.id === torrent.infoHash)
             index = index === -1 ? torrents.length : index
-            console.dir(torrent.progress)
             torrents[index] = {
                 id: torrent.infoHash,
                 downloaded: torrent.downloaded,
                 downloadSpeed: torrent.downloadSpeed,
-                progress: torrent.progress
+                progress: torrent.progress,
+                ready: false
             }
-            console.dir(torrents)
         })
         torrent.on('warning', function (err) {
             console.dir(err);
         })
         torrent.on('done', function () {
+            console.dir(`Torrent: ${torrent.infoHash} is downloaded`)
+            console.dir(torrent.progress)
+            torrents[torrents.findIndex(el => el.id === torrent.infoHash)] = {
+                id: torrent.infoHash,
+                downloaded: torrent.downloaded,
+                downloadSpeed: 0,
+                progress: torrent.progress,
+                ready: true
+            }
             //torr.size = torrent.length
             //torr.save()
         })
@@ -118,11 +127,15 @@ wss.on('connection', function connection(ws, req) {
                     let torrent = torrents.find(el => el.id === client.id)
                     ws.send(JSON.stringify(torrent))
                     console.dir(torrents)
+                    if (torrent.ready) {
+                        ws.close();
+                    }
                 })
+                if (wss.clients.size == 0) {
+                    clearTimeout(timer);
+                }
                 timer = setTimeout(tick, 1500);
             }, 2000);
-        } else if (wss.clients.size == 0) {
-            clearTimeout(timer);
         }
 
         wss.clients.forEach(function each(client) {
