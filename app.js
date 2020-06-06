@@ -56,6 +56,7 @@ app.post('/torrent', function (req, res) {
         download(tr.infoHash)
     })
     fs.unlinkSync(req.files.torrent.tempFilePath)
+    res.send('Torrent start download')
 })
 
 app.post('/magnet', function (req, res) {
@@ -70,6 +71,7 @@ app.post('/magnet', function (req, res) {
                     if (err) return handleError(err);
         */
         download(req.body.magnet)
+        res.send('Torrent start download')
         //   })
     } else {
         res.send('Error: not a magnet')
@@ -84,16 +86,9 @@ function download(magnet) {
         path: './torrent'
     }, function (torrent) {
         console.dir(`Torrent: ${torrent.infoHash} is start download`)
+
         torrent.on('download', function () {
-            let index = torrents.findIndex(el => el.id === torrent.infoHash)
-            index = index === -1 ? torrents.length : index
-            torrents[index] = {
-                id: torrent.infoHash,
-                downloaded: torrent.downloaded,
-                downloadSpeed: torrent.downloadSpeed,
-                progress: torrent.progress,
-                ready: false
-            }
+            updateTorrInfo(torrent)
         })
         torrent.on('warning', function (err) {
             console.dir(err);
@@ -101,17 +96,34 @@ function download(magnet) {
         torrent.on('done', function () {
             console.dir(`Torrent: ${torrent.infoHash} is downloaded`)
             console.dir(torrent.progress)
-            torrents[torrents.findIndex(el => el.id === torrent.infoHash)] = {
-                id: torrent.infoHash,
-                downloaded: torrent.downloaded,
-                downloadSpeed: 0,
-                progress: torrent.progress,
-                ready: true
-            }
+            updateTorrInfo(torrent)
             //torr.size = torrent.length
             //torr.save()
         })
     })
+}
+
+function updateTorrInfo(torrent) {
+    let filesTemp = []
+    filesTemp = torrent.files.map((e) => {
+        return {
+            name: e.name,
+            length: e.length,
+            downloaded: e.downloaded,
+            progress: e.progress
+        }
+    })
+    let index = torrents.findIndex(el => el.id === torrent.infoHash)
+    index = index === -1 ? torrents.length : index
+    torrents[index] = {
+        id: torrent.infoHash,
+        name: torrent.name,
+        length: torrent.length,
+        downloaded: torrent.downloaded,
+        downloadSpeed: torrent.downloadSpeed,
+        progress: torrent.progress,
+        files: filesTemp
+    }
 }
 
 wss.on('connection', function connection(ws, req) {
@@ -124,11 +136,13 @@ wss.on('connection', function connection(ws, req) {
         if (wss.clients.size == 1) {
             timer = setTimeout(function tick() {
                 wss.clients.forEach(function each(client) {
-                    let torrent = torrents.find(el => el.id === client.id)
-                    ws.send(JSON.stringify(torrent))
-                    console.dir(torrents)
-                    if (torrent.ready) {
-                        ws.close();
+                    let torr = torrents.find(el => el.id === client.id)
+                    if (torr) {
+                        ws.send(JSON.stringify(torr))
+                        console.dir(torrents)
+                        if (torr.progress === 1) {
+                            ws.close();
+                        }
                     }
                 })
                 if (wss.clients.size == 0) {
