@@ -63,7 +63,7 @@ app.post('/register', function (req, res) {
         bcrypt.genSalt(10, function (err, salt) {
             bcrypt.hash(newUser.password, salt, function (err, hash) {
                 if (err) {
-                    log(err)
+                    console.log(err)
                 }
                 newUser.password = hash
                 newUser.save(function (err) {
@@ -81,7 +81,7 @@ app.post('/register', function (req, res) {
     }
 })
 
-router.post('/login', function (req, res, next) {
+app.post('/login', function (req, res, next) {
     req.body.email = req.body.email.toLowerCase()
     passport.authenticate('local', {
         successRedirect: '/',
