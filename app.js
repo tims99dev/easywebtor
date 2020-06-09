@@ -1,43 +1,45 @@
 const express = require("express")
-const bodyParser = require("body-parser");
-const fileUpload = require('express-fileupload');
-const fs = require("fs");
+const bodyParser = require("body-parser")
+const fileUpload = require('express-fileupload')
+const fs = require("fs")
 const parseTorrent = require('parse-torrent')
 const mongoose = require("mongoose")
 const url = require("url")
 const http = require('http')
 const cors = require('cors')
-const TorentList = require('./model/torrents')
+const bcrypt = require('bcryptjs')
+const passport = require('passport')
 const WebTorrent = require('webtorrent')
-const WebSocket = require('ws');
-
+const WebSocket = require('ws')
+const TorentList = require('./model/torrents')
+const User = require('./model/users')
 const client = new WebTorrent()
 
-let port = process.env.PORT | 80
-/*
+let port = process.env.PORT || 80
+
 mongoose.connect(`mongodb+srv://${process.env.DBLOGIN}:${process.env.DBPASS}@cluster-lxzy5.mongodb.net/torrents`, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
     useFindAndModify: false
 })
-*/
-const app = express();
 
-const server = http.createServer(app);
+const app = express()
+
+const server = http.createServer(app)
 
 const wss = new WebSocket.Server({
     server
-});
+})
 
 app.use(bodyParser.urlencoded({
     extended: false
-}));
+}))
 app.use(bodyParser.json())
 app.use(cors())
 app.use(fileUpload({
     useTempFiles: true,
     tempFileDir: './tmp/'
-}));
+}))
 /*
 app.get('/torrents', (req, res) => {
     TorentList.find({}, (err, torrents) => {
@@ -45,6 +47,48 @@ app.get('/torrents', (req, res) => {
     })
 })
 */
+
+app.post('/register', function (req, res) {
+    const email = req.body.email
+    const password = req.body.password
+    const password2 = req.body.password2
+
+    if (email.test(/^(([^<>()\[\]\\.,:\s@"]+(\.[^<>()\[\]\\.,:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/i) && password.trim() && password2.trim() && password.trim() === password2.trim()) {
+        let email = email.toLowerCase()
+        let newUser = new User({
+            email: email,
+            password: password,
+        })
+
+        bcrypt.genSalt(10, function (err, salt) {
+            bcrypt.hash(newUser.password, salt, function (err, hash) {
+                if (err) {
+                    log(err)
+                }
+                newUser.password = hash
+                newUser.save(function (err) {
+                    if (err) {
+                        console.log(err)
+                        return
+                    } else {
+                        res.send('ok')
+                    }
+                })
+            })
+        })
+    } else {
+        res.send('Error.')
+    }
+})
+
+router.post('/login', function (req, res, next) {
+    req.body.email = req.body.email.toLowerCase()
+    passport.authenticate('local', {
+        successRedirect: '/',
+        failureRedirect: '/users/login'
+    })(req, res, next)
+})
+
 app.post('/torrent', function (req, res) {
     let tr = parseTorrent(fs.readFileSync(req.files.torrent.tempFilePath))
     let torrent = new TorentList({
@@ -61,18 +105,17 @@ app.post('/torrent', function (req, res) {
 
 app.post('/magnet', function (req, res) {
     if (req.body.magnet.match(/magnet:\?xt=urn:[a-z0-9]+/i)) {
-        /*
-                let magnet = parseTorrent(req.body.magnet)
-                let torrent = new TorentList({
-                    name: magnet.name,
-                    magnet: req.body.magnet
-                })
-                torrent.save(function (err, torr) {
-                    if (err) return handleError(err);
-        */
-        download(req.body.magnet)
-        res.send('Torrent start download')
-        //   })
+        let magnet = parseTorrent(req.body.magnet)
+        let torrent = new TorentList({
+            name: magnet.name,
+            magnet: req.body.magnet
+        })
+        torrent.save(function (err, torr) {
+            if (err) return handleError(err)
+
+            download(req.body.magnet)
+            res.send('Torrent start download')
+        })
     } else {
         res.send('Error: not a magnet')
     }
@@ -91,7 +134,7 @@ function download(magnet) {
             updateTorrInfo(torrent)
         })
         torrent.on('warning', function (err) {
-            console.dir(err);
+            console.dir(err)
         })
         torrent.on('done', function () {
             console.dir(`Torrent: ${torrent.infoHash} is downloaded`)
@@ -108,7 +151,7 @@ function updateTorrInfo(torrent) {
     filesTemp = torrent.files.map((e) => {
         return {
             name: e.name,
-            length: e.length,
+            size: e.length,
             downloaded: e.downloaded,
             progress: e.progress
         }
@@ -127,12 +170,12 @@ function updateTorrInfo(torrent) {
 }
 
 wss.on('connection', function connection(ws, req) {
-    console.log("connection ...");
-    const parameters = url.parse(req.url, true);
+    console.log("connection ...")
+    const parameters = url.parse(req.url, true)
 
     if (parameters.query.id) {
         ws.id = parameters.query.id
-        let timer;
+        let timer
         if (wss.clients.size == 1) {
             timer = setTimeout(function tick() {
                 wss.clients.forEach(function each(client) {
@@ -141,26 +184,26 @@ wss.on('connection', function connection(ws, req) {
                         ws.send(JSON.stringify(torr))
                         console.dir(torrents)
                         if (torr.progress === 1) {
-                            ws.close();
+                            ws.close()
                         }
                     }
                 })
                 if (wss.clients.size == 0) {
-                    clearTimeout(timer);
+                    clearTimeout(timer)
                 }
-                timer = setTimeout(tick, 1500);
-            }, 2000);
+                timer = setTimeout(tick, 1500)
+            }, 2000)
         }
 
         wss.clients.forEach(function each(client) {
-            console.log('Client.ID: ' + client.id);
-        });
+            console.log('Client.ID: ' + client.id)
+        })
     } else {
         ws.send("Error connection.")
-        ws.close();
+        ws.close()
     }
 })
 
 server.listen(port, function () {
-    console.log("Started on PORT " + port);
+    console.log("Started on PORT " + port)
 })
