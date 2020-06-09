@@ -49,12 +49,11 @@ app.get('/torrents', (req, res) => {
 */
 
 app.post('/register', function (req, res) {
-    const email = req.body.email
+    const email = req.body.email.toLowerCase()
     const password = req.body.password
     const password2 = req.body.password2
 
-    if (email.test(/^(([^<>()\[\]\\.,:\s@"]+(\.[^<>()\[\]\\.,:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/i) && password.trim() && password2.trim() && password.trim() === password2.trim()) {
-        let email = email.toLowerCase()
+    if (/^(([^<>()\[\]\\.,:\s@"]+(\.[^<>()\[\]\\.,:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/i.test(email) && password.trim() && password2.trim() && password.trim() === password2.trim()) {
         let newUser = new User({
             email: email,
             password: password,
