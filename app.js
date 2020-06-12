@@ -7,29 +7,42 @@ const mongoose = require("mongoose")
 const url = require("url")
 const http = require('http')
 const cors = require('cors')
-const bcrypt = require('bcryptjs')
 const passport = require('passport')
+const cookieSession = require('cookie-session')
 const WebTorrent = require('webtorrent')
 const WebSocket = require('ws')
-const TorentList = require('./model/torrents')
+
+
+const TorrentList = require('./model/torrents')
 const User = require('./model/users')
-const client = new WebTorrent()
 
 let port = process.env.PORT || 80
-
+process.env.DBLOGIN = 'temp'
+process.env.DBPASS = '987654321'
 mongoose.connect(`mongodb+srv://${process.env.DBLOGIN}:${process.env.DBPASS}@cluster-lxzy5.mongodb.net/torrents`, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
+    useCreateIndex: true,
     useFindAndModify: false
 })
 
 const app = express()
+
+const client = new WebTorrent()
 
 const server = http.createServer(app)
 
 const wss = new WebSocket.Server({
     server
 })
+app.use(cookieSession({
+    name: 'session',
+    keys: ['secret'],
+}))
+require('./config/passport')(passport);
+// Passport Middleware
+app.use(passport.initialize());
+app.use(passport.session());
 
 app.use(bodyParser.urlencoded({
     extended: false
@@ -40,109 +53,91 @@ app.use(fileUpload({
     useTempFiles: true,
     tempFileDir: './tmp/'
 }))
-/*
-app.get('/torrents', (req, res) => {
-    TorentList.find({}, (err, torrents) => {
-        res.send(torrents)
-    })
-})
-*/
 
-app.post('/register', function (req, res) {
-    const email = req.body.email.toLowerCase()
-    const password = req.body.password
-    const password2 = req.body.password2
+app.use('/torrent', express.static(__dirname + '/torrent'));
 
-    if (/^(([^<>()\[\]\\.,:\s@"]+(\.[^<>()\[\]\\.,:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/i.test(email) && password.trim() && password2.trim() && password.trim() === password2.trim()) {
-        let newUser = new User({
-            email: email,
-            password: password,
-        })
+let users = require('./routers/user')
+app.use('/users', users)
 
-        bcrypt.genSalt(10, function (err, salt) {
-            bcrypt.hash(newUser.password, salt, function (err, hash) {
-                if (err) {
-                    console.log(err)
-                }
-                newUser.password = hash
-                newUser.save(function (err) {
-                    if (err) {
-                        console.log(err)
-                        return
-                    } else {
-                        res.send('ok')
-                    }
-                })
-            })
-        })
-    } else {
-        res.send('Error.')
-    }
-})
-
-app.post('/login', function (req, res, next) {
-    req.body.email = req.body.email.toLowerCase()
-    passport.authenticate('local', {
-        successRedirect: '/',
-        failureRedirect: '/users/login'
-    })(req, res, next)
-})
+function handleError(error) {
+    console.error(error)
+}
 
 app.post('/torrent', function (req, res) {
-    let tr = parseTorrent(fs.readFileSync(req.files.torrent.tempFilePath))
-    let torrent = new TorentList({
-        name: tr.name,
-        magnet: parseTorrent.toMagnetURI(tr)
-    })
-    torrent.save(function (err, torr) {
-        if (err) return handleError(err)
-        download(tr.infoHash)
-    })
-    fs.unlinkSync(req.files.torrent.tempFilePath)
-    res.send('Torrent start download')
+    if (req.files.torrent.mimetype === "application/x-bittorrent") {
+        let torrent = parseTorrent(fs.readFileSync(req.files.torrent.tempFilePath))
+
+        download(torrent, req.user)
+
+        fs.unlinkSync(req.files.torrent.tempFilePath)
+        res.send('Torrent start download')
+    } else {
+        res.status(500).send('Error: this file not supported')
+    }
 })
 
 app.post('/magnet', function (req, res) {
     if (req.body.magnet.match(/magnet:\?xt=urn:[a-z0-9]+/i)) {
         let magnet = parseTorrent(req.body.magnet)
-        let torrent = new TorentList({
-            name: magnet.name,
-            magnet: req.body.magnet
-        })
-        torrent.save(function (err, torr) {
-            if (err) return handleError(err)
 
-            download(req.body.magnet)
-            res.send('Torrent start download')
-        })
+        download(magnet, req.user)
+        res.send('Torrent start download')
+
     } else {
-        res.send('Error: not a magnet')
+        res.status(500).send('Error: not a magnet')
     }
-
 })
 
 var torrents = []
 
-function download(magnet) {
-    client.add(magnet, {
-        path: './torrent'
-    }, function (torrent) {
-        console.dir(`Torrent: ${torrent.infoHash} is start download`)
+async function download(torrent, user) {
+    if (user) {
+        let doc = await User.findById(user.id)
+        //doc.torrents.push(torrent.infoHash)
+        if (doc.torrents.indexOf(torrent.infoHash) === -1)
+            doc.torrents.push(torrent.infoHash);
+        doc.save((err) => {
+            if (err) return handleError(err)
+        })
+        /*
+        User.updateOne({ id: user.id }, { $push: { torrents: torrent.infoHash } }, (err) => {
+            if (err) return handleError(err)
+        })
+        */
+    }
+    TorrentList.findOne({ infoHash: torrent.infoHash }, (err, doc) => {
+        if (err) return handleError(err)
+        if (!doc) {
+            client.add(torrent, {
+                path: './torrent/' + torrent.infoHash
+            }, function (torrent) {
+                let dbTorrnet = new TorrentList({
+                    name: torrent.name,
+                    magnet: parseTorrent.toMagnetURI(torrent),
+                    size: torrent.length,
+                    infoHash: torrent.infoHash
+                })
+                dbTorrnet.save(function (err, torr) {
+                    if (err) return handleError(err)
+                })
+                console.dir(`Torrent: ${torrent.infoHash} is start download`)
 
-        torrent.on('download', function () {
-            updateTorrInfo(torrent)
-        })
-        torrent.on('warning', function (err) {
-            console.dir(err)
-        })
-        torrent.on('done', function () {
-            console.dir(`Torrent: ${torrent.infoHash} is downloaded`)
-            console.dir(torrent.progress)
-            updateTorrInfo(torrent)
-            //torr.size = torrent.length
-            //torr.save()
-        })
+                torrent.on('download', function () {
+                    updateTorrInfo(torrent)
+                })
+                torrent.on('done', function () {
+                    console.dir(`Torrent: ${torrent.infoHash} is downloaded`)
+                    console.dir(torrent.progress)
+                    updateTorrInfo(torrent)
+                    //torr.size = torrent.length
+                    //torr.save()
+                })
+            })
+        } else {
+
+        }
     })
+
 }
 
 function updateTorrInfo(torrent) {
@@ -152,7 +147,8 @@ function updateTorrInfo(torrent) {
             name: e.name,
             size: e.length,
             downloaded: e.downloaded,
-            progress: e.progress
+            progress: e.progress,
+            path: e.path
         }
     })
     let index = torrents.findIndex(el => el.id === torrent.infoHash)

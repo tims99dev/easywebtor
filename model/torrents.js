@@ -10,6 +10,7 @@ const schema = new Schema({
         default: 0
     },
     magnet: String,
+    infoHash: String,
     date: {
         type: Date,
         default: new Date()

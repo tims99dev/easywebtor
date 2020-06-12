@@ -6,6 +6,7 @@ const {
 const schema = new Schema({
     email: {
         type: String,
+        unique: true,
         required: true
     },
     password: {
@@ -15,7 +16,10 @@ const schema = new Schema({
     date: {
         type: Date,
         default: new Date()
-    }
+    },
+    torrents: [{
+        type: String
+    }]
 })
 
 module.exports = model('User', schema)
