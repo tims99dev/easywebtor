@@ -93,51 +93,35 @@ var torrents = []
 async function download(torrent, user) {
     if (user) {
         let doc = await User.findById(user.id)
-        //doc.torrents.push(torrent.infoHash)
         if (doc.torrents.indexOf(torrent.infoHash) === -1)
             doc.torrents.push(torrent.infoHash);
         doc.save((err) => {
             if (err) return handleError(err)
         })
-        /*
-        User.updateOne({ id: user.id }, { $push: { torrents: torrent.infoHash } }, (err) => {
+    }
+    client.add(torrent, {
+        path: './torrent/' + torrent.infoHash
+    }, function (torrent) {
+        let dbTorrnet = new TorrentList({
+            name: torrent.name,
+            magnet: parseTorrent.toMagnetURI(torrent),
+            size: torrent.length,
+            infoHash: torrent.infoHash
+        })
+        dbTorrnet.save(function (err, torr) {
             if (err) return handleError(err)
         })
-        */
-    }
-    TorrentList.findOne({ infoHash: torrent.infoHash }, (err, doc) => {
-        if (err) return handleError(err)
-        if (!doc) {
-            client.add(torrent, {
-                path: './torrent/' + torrent.infoHash
-            }, function (torrent) {
-                let dbTorrnet = new TorrentList({
-                    name: torrent.name,
-                    magnet: parseTorrent.toMagnetURI(torrent),
-                    size: torrent.length,
-                    infoHash: torrent.infoHash
-                })
-                dbTorrnet.save(function (err, torr) {
-                    if (err) return handleError(err)
-                })
-                console.dir(`Torrent: ${torrent.infoHash} is start download`)
+        console.dir(`Torrent: ${torrent.infoHash} is start download`)
 
-                torrent.on('download', function () {
-                    updateTorrInfo(torrent)
-                })
-                torrent.on('done', function () {
-                    console.dir(`Torrent: ${torrent.infoHash} is downloaded`)
-                    console.dir(torrent.progress)
-                    updateTorrInfo(torrent)
-                    //torr.size = torrent.length
-                    //torr.save()
-                })
-            })
-        } else {
-
-        }
+        torrent.on('download', function () {
+            updateTorrInfo(torrent)
+        })
+        torrent.on('done', function () {
+            console.dir(`Torrent: ${torrent.infoHash} is downloaded`)
+            console.dir(torrent.progress)
+            updateTorrInfo(torrent)
+        })
     })
-
 }
 
 function updateTorrInfo(torrent) {
