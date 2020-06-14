@@ -11,10 +11,9 @@ function handleError(error) {
     console.error(error)
 }
 
-router.get('/:id', (req, res) => {
-    //res.send(req.user)
-    if (req.user.id === req.params.id) {
-        User.findById(req.params.id, (err, user) => {
+router.get('/torrents', (req, res) => {
+    if (req.user) {
+        User.findById(req.user.id, (err, user) => {
             if (err) return handleError(err)
 
             Torrent.find({
