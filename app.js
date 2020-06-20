@@ -12,11 +12,10 @@ const cookieSession = require('cookie-session')
 const WebTorrent = require('webtorrent')
 const WebSocket = require('ws')
 
-
 const TorrentList = require('./model/torrents')
 const User = require('./model/users')
 
-let port = process.env.PORT || 80
+let port = process.env.PORT || 3000
 process.env.DBLOGIN = 'temp'
 process.env.DBPASS = '987654321'
 mongoose.connect(`mongodb+srv://${process.env.DBLOGIN}:${process.env.DBPASS}@cluster-lxzy5.mongodb.net/torrents`, {
@@ -48,7 +47,8 @@ app.use(bodyParser.urlencoded({
     extended: false
 }))
 app.use(bodyParser.json())
-app.use(cors())
+//TODO change frontend server
+app.use(cors({ credentials: true, origin: 'http://localhost:8080' }))
 app.use(fileUpload({
     useTempFiles: true,
     tempFileDir: './tmp/'
