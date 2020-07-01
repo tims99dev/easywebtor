@@ -70,7 +70,7 @@ app.post('/torrent', function (req, res) {
         download(torrent, req.user)
 
         fs.unlinkSync(req.files.torrent.tempFilePath)
-        res.send('Torrent start download')
+        res.send({ id: torrent.infoHash })
     } else {
         res.status(500).send('Error: this file not supported')
     }
@@ -81,7 +81,7 @@ app.post('/magnet', function (req, res) {
         let magnet = parseTorrent(req.body.magnet)
 
         download(magnet, req.user)
-        res.send('Torrent start download')
+        res.send({ id: magnet.infoHash })
 
     } else {
         res.status(500).send('Error: not a magnet')
@@ -90,18 +90,10 @@ app.post('/magnet', function (req, res) {
 
 var torrents = []
 
-async function download(torrent, user) {
-    if (user) {
-        let doc = await User.findById(user.id)
-        if (doc.torrents.indexOf(torrent.infoHash) === -1)
-            doc.torrents.push(torrent.infoHash);
-        doc.save((err) => {
-            if (err) return handleError(err)
-        })
-    }
+function download(torrent, user) {
     client.add(torrent, {
         path: './torrent/' + torrent.infoHash
-    }, function (torrent) {
+    }, async function (torrent) {
         let dbTorrnet = new TorrentList({
             name: torrent.name,
             magnet: parseTorrent.toMagnetURI(torrent),
@@ -111,6 +103,13 @@ async function download(torrent, user) {
         dbTorrnet.save(function (err, torr) {
             if (err) return handleError(err)
         })
+        if (user) {
+            let doc = await User.findById(user.id)
+            doc.torrents.push(dbTorrnet.id);
+            doc.save((err) => {
+                if (err) return handleError(err)
+            })
+        }
         console.dir(`Torrent: ${torrent.infoHash} is start download`)
 
         torrent.on('download', function () {

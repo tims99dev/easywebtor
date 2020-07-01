@@ -17,7 +17,7 @@ router.get('/torrents', (req, res) => {
             if (err) return handleError(err)
 
             Torrent.find({
-                infoHash: {
+                _id: {
                     $in: user.torrents
                 }
             }, (err, torrents) => {
@@ -26,7 +26,7 @@ router.get('/torrents', (req, res) => {
                 res.send(torrents)
             })
         })
-    } else {        
+    } else {
         res.status(500).send('Error login to continue.')
     }
 })
@@ -73,7 +73,7 @@ router.post('/login', function (req, res, next) {
         if (!user) { return res.status(500).send('Error.') }
         req.logIn(user, function (err) {
             console.log(req.user)
-            res.send(req.user.email)
+            res.send({ id: req.user.id, email: req.user.email })
         });
     })(req, res, next)
 })
