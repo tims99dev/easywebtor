@@ -1,6 +1,8 @@
 const express = require("express")
 const bcrypt = require('bcryptjs')
 const passport = require('passport')
+const path = require('path');
+const fs = require("fs")
 
 const User = require('../model/users')
 const Torrent = require('../model/torrents')
@@ -9,6 +11,27 @@ const router = express.Router();
 
 function handleError(error) {
     console.error(error)
+}
+
+const removeDir = function (path) {
+    if (fs.existsSync(path)) {
+        const files = fs.readdirSync(path)
+
+        if (files.length > 0) {
+            files.forEach(function (filename) {
+                if (fs.statSync(path + "/" + filename).isDirectory()) {
+                    removeDir(path + "/" + filename)
+                } else {
+                    fs.unlinkSync(path + "/" + filename)
+                }
+            })
+            fs.rmdirSync(path)
+        } else {
+            fs.rmdirSync(path)
+        }
+    } else {
+        console.log("Directory path not found.")
+    }
 }
 
 router.get('/torrents', (req, res) => {
@@ -25,6 +48,32 @@ router.get('/torrents', (req, res) => {
 
                 res.send(torrents)
             })
+        })
+    } else {
+        res.status(500).send('Error login to continue.')
+    }
+})
+
+router.get('/remove/:id', (req, res) => {
+    if (req.user) {
+        User.findById(req.user.id, (err, user) => {
+            if (err) return handleError(err)
+
+            if (user.torrents.includes(req.params.id)) {
+                Torrent.findOneAndRemove({
+                    _id: req.params.id
+                }, async (err, torrents) => {
+                    if (err) return handleError(err)
+                    user.torrents = user.torrents.filter(e => e != req.params.id)
+                    await user.save()
+                    //TODO:remove
+                    //fs.rmdirSync(path.join(__dirname, '../torrent/', torrents.infoHash), { recursive: true })
+                    removeDir(path.join(__dirname, '../torrent/', torrents.infoHash))
+                    res.send({ id: req.params.id })
+                })
+            } else {
+                res.send('Error: not find')
+            }
         })
     } else {
         res.status(500).send('Error login to continue.')
