@@ -2,12 +2,14 @@ const express = require("express")
 const bodyParser = require("body-parser")
 const fileUpload = require('express-fileupload')
 const fs = require("fs")
+const path = require("path")
 const parseTorrent = require('parse-torrent')
 const mongoose = require("mongoose")
 const url = require("url")
 const http = require('http')
-const cors = require('cors')
 const passport = require('passport')
+const rimraf = require('rimraf')
+const cors = require('cors')
 const cookieSession = require('cookie-session')
 const WebTorrent = require('webtorrent')
 const WebSocket = require('ws')
@@ -62,6 +64,16 @@ app.use('/users', users)
 function handleError(error) {
     console.error(error)
 }
+
+app.post('/cancel', function (req, res) {
+    let magnet = parseTorrent(req.body.id)
+    if (magnet) {
+        client.remove(magnet)
+        rimraf(path.join('./torrent/' + magnet.infoHash))
+    } else {
+        res.status(500).send('Error: this not id')
+    }
+})
 
 app.post('/torrent', function (req, res) {
     if (req.files.torrent.mimetype === "application/x-bittorrent") {

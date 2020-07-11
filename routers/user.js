@@ -2,7 +2,7 @@ const express = require("express")
 const bcrypt = require('bcryptjs')
 const passport = require('passport')
 const path = require('path');
-const fs = require("fs")
+const rimraf = require("rimraf")
 
 const User = require('../model/users')
 const Torrent = require('../model/torrents')
@@ -11,27 +11,6 @@ const router = express.Router();
 
 function handleError(error) {
     console.error(error)
-}
-
-const removeDir = function (path) {
-    if (fs.existsSync(path)) {
-        const files = fs.readdirSync(path)
-
-        if (files.length > 0) {
-            files.forEach(function (filename) {
-                if (fs.statSync(path + "/" + filename).isDirectory()) {
-                    removeDir(path + "/" + filename)
-                } else {
-                    fs.unlinkSync(path + "/" + filename)
-                }
-            })
-            fs.rmdirSync(path)
-        } else {
-            fs.rmdirSync(path)
-        }
-    } else {
-        console.log("Directory path not found.")
-    }
 }
 
 router.get('/torrents', (req, res) => {
@@ -66,9 +45,9 @@ router.get('/remove/:id', (req, res) => {
                     if (err) return handleError(err)
                     user.torrents = user.torrents.filter(e => e != req.params.id)
                     await user.save()
-                    //TODO:remove
-                    //fs.rmdirSync(path.join(__dirname, '../torrent/', torrents.infoHash), { recursive: true })
-                    removeDir(path.join(__dirname, '../torrent/', torrents.infoHash))
+
+                    rimraf(path.join('../torrent/' + torrents.infoHash))
+
                     res.send({ id: req.params.id })
                 })
             } else {
