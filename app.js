@@ -66,36 +66,44 @@ function handleError(error) {
 }
 
 app.post('/cancel', function (req, res) {
-    let magnet = parseTorrent(req.body.id)
-    if (magnet) {
+    try {
+        let magnet = parseTorrent(req.body.id)
+
         client.remove(magnet)
-        rimraf(path.join('./torrent/' + magnet.infoHash))
-    } else {
+        torrents = torrents.filter(e => e.id !== magnet.infoHash)
+        rimraf(path.join('./torrent/' + magnet.infoHash), (err) => {
+            console.log(err);
+        })
+        res.send(`Torrent: ${magnet.infoHash} is canceled`)
+    } catch (error) {
+        console.log(error)
         res.status(500).send('Error: this not id')
     }
+
 })
 
 app.post('/torrent', function (req, res) {
-    if (req.files.torrent.mimetype === "application/x-bittorrent") {
+    try {
         let torrent = parseTorrent(fs.readFileSync(req.files.torrent.tempFilePath))
 
         download(torrent, req.user)
 
         fs.unlinkSync(req.files.torrent.tempFilePath)
         res.send({ id: torrent.infoHash })
-    } else {
+    } catch (error) {
+        console.log(error)
         res.status(500).send('Error: this file not supported')
     }
 })
 
 app.post('/magnet', function (req, res) {
-    if (req.body.magnet.match(/magnet:\?xt=urn:[a-z0-9]+/i)) {
+    try {
         let magnet = parseTorrent(req.body.magnet)
 
         download(magnet, req.user)
         res.send({ id: magnet.infoHash })
-
-    } else {
+    } catch (error) {
+        console.log(error)
         res.status(500).send('Error: not a magnet')
     }
 })
