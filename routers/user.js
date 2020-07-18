@@ -46,7 +46,9 @@ router.get('/remove/:id', (req, res) => {
                     user.torrents = user.torrents.filter(e => e != req.params.id)
                     await user.save()
 
-                    rimraf(path.join('../torrent/' + torrents.infoHash))
+                    rimraf(path.join('../torrent/' + torrents.infoHash), (err) => {
+                        if (err) return handleError(err)
+                    })
 
                     res.send({ id: req.params.id })
                 })

@@ -72,7 +72,7 @@ app.post('/cancel', function (req, res) {
         client.remove(magnet)
         torrents = torrents.filter(e => e.id !== magnet.infoHash)
         rimraf(path.join('./torrent/' + magnet.infoHash), (err) => {
-            console.log(err);
+            if (err) return handleError(err)
         })
         res.send(`Torrent: ${magnet.infoHash} is canceled`)
     } catch (error) {
