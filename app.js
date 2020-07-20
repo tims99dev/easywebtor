@@ -13,6 +13,7 @@ const cors = require('cors')
 const cookieSession = require('cookie-session')
 const WebTorrent = require('webtorrent')
 const WebSocket = require('ws')
+const AdmZip = require('adm-zip');
 
 const TorrentList = require('./model/torrents')
 const User = require('./model/users')
@@ -79,7 +80,6 @@ app.post('/cancel', function (req, res) {
         console.log(error)
         res.status(500).send('Error: this not id')
     }
-
 })
 
 app.post('/torrent', function (req, res) {
@@ -111,36 +111,46 @@ app.post('/magnet', function (req, res) {
 var torrents = []
 
 function download(torrent, user) {
-    client.add(torrent, {
-        path: './torrent/' + torrent.infoHash
-    }, async function (torrent) {
-        let dbTorrnet = new TorrentList({
-            name: torrent.name,
-            magnet: parseTorrent.toMagnetURI(torrent),
-            size: torrent.length,
-            infoHash: torrent.infoHash
-        })
-        dbTorrnet.save(function (err, torr) {
-            if (err) return handleError(err)
-        })
-        if (user) {
-            let doc = await User.findById(user.id)
-            doc.torrents.push(dbTorrnet.id);
-            doc.save((err) => {
+    let existTorrent = client.get(torrent)
+    if (!existTorrent) {
+        client.add(torrent, {
+            path: './torrent/' + torrent.infoHash
+        }, async function (torrent) {
+            let dbTorrnet = new TorrentList({
+                name: torrent.name,
+                magnet: parseTorrent.toMagnetURI(torrent),
+                size: torrent.length,
+                infoHash: torrent.infoHash
+            })
+            dbTorrnet.save(function (err, torr) {
                 if (err) return handleError(err)
             })
-        }
-        console.dir(`Torrent: ${torrent.infoHash} is start download`)
+            if (user) {
+                let doc = await User.findById(user.id)
+                doc.torrents.push(dbTorrnet.id);
+                doc.save((err) => {
+                    if (err) return handleError(err)
+                })
+            }
+            console.dir(`Torrent: ${torrent.infoHash} is start download`)
 
-        torrent.on('download', function () {
-            updateTorrInfo(torrent)
+            torrent.on('download', function () {
+                updateTorrInfo(torrent)
+            })
+            torrent.on('done', function () {
+                console.dir(`Torrent: ${torrent.infoHash} is downloaded`)
+                console.dir(torrent.progress)
+                updateTorrInfo(torrent)
+                const zip = new AdmZip();
+                zip.addLocalFolder('./torrent/' + torrent.infoHash)
+                zip.writeZip(`./torrent/${torrent.infoHash}/torrent.zip`, (error) => {
+                    console.log(error)
+                });
+            })
         })
-        torrent.on('done', function () {
-            console.dir(`Torrent: ${torrent.infoHash} is downloaded`)
-            console.dir(torrent.progress)
-            updateTorrInfo(torrent)
-        })
-    })
+    } else {
+        updateTorrInfo(existTorrent)
+    }
 }
 
 function updateTorrInfo(torrent) {
