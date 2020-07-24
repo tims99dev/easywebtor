@@ -83,6 +83,29 @@ app.post('/cancel', function (req, res) {
     }
 })
 
+app.get('/zip/:id', function (req, res) {
+    try {
+        let torrent = parseTorrent(req.params.id)
+        if (torrents.find(el => el.id === torrent.infoHash).progress === 1) {
+            if (!fs.existsSync(`./torrent/${torrent.infoHash}/torrent.zip`)) {
+                // Do something
+                const zip = new AdmZip();
+                zip.addLocalFolder('./torrent/' + torrent.infoHash)
+                zip.writeZip(`./torrent/${torrent.infoHash}/torrent.zip`, (error) => {
+                    console.log(error)
+                });
+            } else {
+                res.send('file ready')
+            }
+        } else {
+            res.send('file not ready')
+        }
+    } catch (error) {
+        console.log(error)
+        res.status(500).send('Error: this file not supported')
+    }
+})
+
 app.post('/torrent', function (req, res) {
     try {
         let torrent = parseTorrent(fs.readFileSync(req.files.torrent.tempFilePath))
@@ -142,11 +165,6 @@ function download(torrent, user) {
                 console.dir(`Torrent: ${torrent.infoHash} is downloaded`)
                 console.dir(torrent.progress)
                 updateTorrInfo(torrent)
-                const zip = new AdmZip();
-                zip.addLocalFolder('./torrent/' + torrent.infoHash)
-                zip.writeZip(`./torrent/${torrent.infoHash}/torrent.zip`, (error) => {
-                    console.log(error)
-                });
             })
         })
     } else {
