@@ -61,6 +61,14 @@ router.get('/remove/:id', (req, res) => {
     }
 })
 
+app.get('/isLogin', function (req, res) {
+    if (req.user) {
+        res.send({ email: req.user.email });
+    } else {
+        res.send({ email: '' });
+    }
+})
+
 router.post('/register', function (req, res) {
     const email = req.body.email.toLowerCase()
     const password = req.body.password
