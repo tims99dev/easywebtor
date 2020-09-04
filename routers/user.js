@@ -61,7 +61,7 @@ router.get('/remove/:id', (req, res) => {
     }
 })
 
-app.get('/isLogin', function (req, res) {
+router.get('/isLogin', function (req, res) {
     if (req.user) {
         res.send({ email: req.user.email });
     } else {
